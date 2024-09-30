@@ -1,20 +1,81 @@
 ---
-title: 记录我写的烂代码
-date: 2024-08-03T12:10:24Z
+title: 大文件上传思路，以及实现
+date: 2024-09-30T06:24:18Z
 slug: post-5
-author: chaseFunny：https://github.com/chaseFunny
-tags: ["编码规范"]
+author: duchao-duchao：https://github.com/duchao-duchao
+tags: []
 ---
 
-#  背景
-记录我写下的所有烂代码，警示自己好好写代码，要不然打的喷嚏都是在骂我写的 💩 山
+### 思路：
 
-## 魔法数
-> 魔法数”（magic number），也称魔法值、魔法字符串、魔术数字等，指的是在代码中直接出现的没有明确含义的数字常量或字符串，通常没有给出解释或者注释来说明其用途。
-> 这样的数字或字符串使得代码难以理解和维护，因为读者无法立即理解这些数字的含义和作用。
+前端拿到文件后，对文件进行切片操作，然后每个分片发送请求给到后端，所有切片都请求成功后，发送一个合并请求，后端进行文件合并
 
-![image](https://github.com/user-attachments/assets/0cf6bbcb-27a7-471d-b204-0fee7f2e74a4)
+核心代码如下：
+```js
+  const handleCustomRequest = async ({ file }: { file: File }) => {  
+    if(!file) return
+    // 切片
+    const fileChunkList = createFileChunk(file)
+    filesListInfo.current = fileChunkList.map(() => 0)
+    try {
+      if(fileChunkList.length > 0){
+        const formDataFirst = new FormData()
+        formDataFirst.append("file", fileChunkList[0]?.file)
+        setLoading(true)
+        const res = await uploadFile(formDataFirst, (e: ProgressEvent) => onUploadProgress(e, 0))
+        if(fileChunkList.length > 1){
+          for (let i = 1; i < fileChunkList.length; i++) {  
+            const formData = new FormData()
+            formData.append("file", fileChunkList[i].file)
+            formData.append("uploadId", res.data.uploadId)
+            await uploadFile(formData, (e: ProgressEvent) => onUploadProgress(e, i))
+          }
+        }
+        // 合并
+        await mergeUploadFile({ uploadId: res?.data?.uploadId })
+        message.success(f('上传成功'))
+        setLoading(false)
+        refreshInfo()
+      }
+    } catch (error) {
+      message.error(error?.response?.data?.msg || f('上传失败'))
+      setLoading(false)
+    }
+  }
+```
+
+### 切片
+```js
+  const createFileChunk = (file: File, size = SIZE) => {
+    const fileChunkList: {file: Blob}[] = []
+    let cur = 0
+    while (cur < file.size) {
+      fileChunkList.push({ file: file.slice(cur, cur + size) })
+        cur += size
+      }
+    return fileChunkList
+  }
+```
+
+### 滚动条展示
+前端已知切片总数
+Process = 所有切片进度累加 /  总进度
+```js
+  const onUploadProgress = (progressEvent: ProgressEvent, index: Number) => {
+    const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total)
+    filesListInfo.current[index] = percentCompleted
+    const newProcess = (filesListInfo.current.reduce((pre, cur)=>{
+      return pre + cur
+    }, 0) / (filesListInfo.current.length))
+    setProcess(newProcess)
+  }
+```
+
+优化
+1、暂停上传
+2、断点续传
+3、文件秒上传（已经上传过的文件）
 
 
 ---
-此文自动发布于：<a href="https://github.com/coderPerseus/blog/issues/5" target="_blank">github issues</a>
+此文自动发布于：<a href="https://github.com/duchao-duchao/dc-blog/issues/5" target="_blank">github issues</a>

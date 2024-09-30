@@ -1,24 +1,271 @@
 ---
-title: git commit 提交规范中文解释
-date: 2024-08-03T11:56:59Z
+title: UMI源码学习【1】——从umi dev到启动流程
+date: 2024-09-30T04:20:43Z
 slug: post-4
-author: coderPerseus：https://github.com/coderPerseus
-tags: ["git","笔记"]
+author: duchao-duchao：https://github.com/duchao-duchao
+tags: ["UMI"]
 ---
 
-这些是 @commitlint/config-conventional 配置中定义的常用提交类型。每个类型的含义如下：
-1. build: 影响构建系统或外部依赖项的更改（例如：gulp、broccoli、npm）
-2. chore: 不修改源代码或测试文件的其他更改。通常用于维护性工作
-3. ci: 持续集成配置文件和脚本的更改（例如：Travis、Circle、BrowserStack、SauceLabs）
-4. docs: 仅文档的更改
-5. feat: 新功能
-6. fix: 修复 bug
-7. perf: 提高性能的代码更改
-8. refactor: 既不修复 bug 也不添加新功能的代码更改
-9. revert: 撤销之前的提交
-10. style: 不影响代码含义的更改（空白、格式化、缺少分号等）
-11. test: 添加缺失的测试或修正现有的测试
-这些类型帮助开发者快速了解每次提交的目的，使得版本历史更加清晰，也便于自动化工具生成更改日志。使用这些规范化的提交类型可以提高项目的可维护性和协作效率
+现在工作用的框架以及脚手架主要都是基于umi开发的，学习一下umi源码还是很有必要的，空闲之余学习了一下umi源码  
+> 以下分析完全基于自己理解, 基于umi 3.0版本，如有错误，还请斧正
+
+> UMI源码学习系列  
+[UMI源码学习【1】——从umi dev到启动流程](https://juejin.cn/post/7310112724944732160)  
+[UMI源码学习【2】——插件机制](https://juejin.cn/post/7310107007984877603)
+
+  
+个人认为，学习源码要从入口开始一步一步向下摸索，就像自己平时用umi工程,启动的时候运行下面的命令，我就会很好奇 umi dev之后的流程，然后顺着这个流程往下，其实整个umi的流程就大致熟悉了，然后再对每一个细小的点深入研究一下。
+```
+cross-env UMI_ENV=ronghe_dev WATCH_IGNORED=none umi dev
+```
+### 加载cli文件
+umi入口就是加载了umi.js，其中加载了cli.js
+
+![image.png](https://p9-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/093d77be057b49b6a47dfcb273100bfb~tplv-k3u1fbpfcp-jj-mark:0:0:0:0:q75.image#?w=1495&h=584&s=116517&e=png&b=262b32)
+
+### new Service
+cli中很操作简单，核心就是new Service();根据环境变量，开发模式以及生产模式有点区别，生产模式直接new Service()；开发模式加载forkedDev，在forkedDev中依旧是new Service()，然后加了一些退出时触发插件中的onExit事件。
+```
+(async () => {
+  try {
+    switch (args._[0]) {
+      case 'dev':
+        const child = fork({
+          scriptPath: require.resolve('./forkedDev'),
+        });
+        // ref:
+        // http://nodejs.cn/api/process/signal_events.html
+        process.on('SIGINT', () => {
+          child.kill('SIGINT');
+        });
+        process.on('SIGTERM', () => {
+          child.kill('SIGTERM');
+        });
+        break;
+      default:
+        const name = args._[0];
+        if (name === 'build') {
+          process.env.NODE_ENV = 'production';
+        }
+        await new Service({
+          cwd: getCwd(),
+        }).run({
+          name,
+          args,
+        });
+        break;
+    }
+  } catch (e) {
+    console.error(chalk.red(e.message));
+    console.error(e.stack);
+    process.exit(1);
+  }
+})();
+```
+其中Service类来自这个文件
+```
+import { Service } from './ServiceWithBuiltIn';
+```
+在ServiceWithBuiltIn中，集成了了核心类@umijs/core中的service,且引入了一些预设以及插件，我们的dev命令就是在@umijs/preset-built-in中进行注册的。  
+@umijs/preset-built-in中准备了许多的插件这个后面细讲，很重要。
+```
+import { dirname, join } from 'path';
+import { IServiceOpts, Service as CoreService } from '@umijs/core';
+
+class Service extends CoreService {
+  constructor(opts: IServiceOpts) {
+    process.env.UMI_VERSION = require('../package').version;
+    process.env.UMI_DIR = dirname(require.resolve('../package'));
+
+    super({
+      ...opts,
+      presets: [
+        require.resolve('@umijs/preset-built-in'),
+        ...(opts.presets || []),
+      ],
+      plugins: [require.resolve('./plugins/umiAlias'), ...(opts.plugins || [])],
+    });
+  }
+}
+
+export { Service };
+
+```
+### Service
+service.js是整个umi源码的核心这个文件要反复多看几遍
+
+上面可以看到主要就是new Service(),看一下service对象主要有那些功能  
+
+源码位置：core/src/Service/Service.js中  
+
+service主要操作这里不细说，介绍一下大概，后面细说每一个模块。  
+service加载环境变量、加载预设、加载插件核心就是加载插件。
+
+### dev命令
+找到源码中preset-built-in
+
+![image.png](https://p6-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/eebc81d20e584fd59b161feac8a5023f~tplv-k3u1fbpfcp-jj-mark:0:0:0:0:q75.image#?w=1920&h=1008&s=377064&e=png&b=262b32)
+dev命令其实就是注册了一个插件,主要操作就是启动开发服务器，产生一些文件（.umi中文件），监听文件变化重启服务器。
+
+![image.png](https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/e5fcd5124cbf45c5ac7c09a04c14456c~tplv-k3u1fbpfcp-jj-mark:0:0:0:0:q75.image#?w=377&h=490&s=26722&e=png&b=22262c)
+
+```
+export default (api: IApi) => {
+  const {
+    env,
+    paths,
+    utils: { chalk, portfinder },
+  } = api;
+
+  api.registerCommand({
+    name: 'dev',
+    description: 'start a dev server for development',
+    fn: async function({ args }) {
+      const defaultPort =
+        process.env.PORT || args?.port || api.config.devServer?.port;
+      port = await portfinder.getPortPromise({
+        port: defaultPort ? parseInt(String(defaultPort), 10) : 8000,
+      });
+      console.log(chalk.cyan('Starting the development server...'));
+      process.send?.({ type: 'UPDATE_PORT', port });
+
+      cleanTmpPathExceptCache({
+        absTmpPath: paths.absTmpPath!,
+      });
+      const watch = process.env.WATCH !== 'none';
+
+      // generate files
+      const unwatchGenerateFiles = await generateFiles({ api, watch });
+      if (unwatchGenerateFiles) unwatchs.push(unwatchGenerateFiles);
+
+      // watch config change
+      if (watch) {
+        const unwatchConfig = api.service.configInstance.watch({
+          userConfig: api.service.userConfig,
+          onChange: async ({ pluginChanged, userConfig, valueChanged }) => {
+            if (pluginChanged.length) {
+              api.restartServer();
+            }
+            if (valueChanged.length) {
+              let reload = false;
+              let regenerateTmpFiles = false;
+              const fns: Function[] = [];
+              valueChanged.forEach(({ key, pluginId }) => {
+                const { onChange } = api.service.plugins[pluginId].config || {};
+                if (onChange === api.ConfigChangeType.regenerateTmpFiles) {
+                  regenerateTmpFiles = true;
+                }
+                if (!onChange || onChange === api.ConfigChangeType.reload) {
+                  reload = true;
+                }
+                if (typeof onChange === 'function') {
+                  fns.push(onChange);
+                }
+              });
+
+              if (reload) {
+                api.restartServer();
+              } else {
+                api.service.userConfig = api.service.configInstance.getUserConfig();
+
+                // TODO: simplify, 和 Service 里的逻辑重复了
+                // 需要 Service 露出方法
+                const defaultConfig = await api.applyPlugins({
+                  key: 'modifyDefaultConfig',
+                  type: api.ApplyPluginsType.modify,
+                  initialValue: await api.service.configInstance.getDefaultConfig(),
+                });
+                api.service.config = await api.applyPlugins({
+                  key: 'modifyConfig',
+                  type: api.ApplyPluginsType.modify,
+                  initialValue: api.service.configInstance.getConfig({
+                    defaultConfig,
+                  }) as any,
+                });
+
+                if (regenerateTmpFiles) {
+                  await generateFiles({ api });
+                } else {
+                  fns.forEach(fn => fn());
+                }
+              }
+            }
+          },
+        });
+        unwatchs.push(unwatchConfig);
+      }
+
+      // delay dev server 启动，避免重复 compile
+      // https://github.com/webpack/watchpack/issues/25
+      // https://github.com/yessky/webpack-mild-compile
+      await delay(500);
+
+      // dev
+      const {
+        bundler,
+        bundleConfigs,
+        bundleImplementor,
+      } = await getBundleAndConfigs({ api, port });
+      const opts: IServerOpts = bundler.setupDevServerOpts({
+        bundleConfigs: bundleConfigs,
+        bundleImplementor,
+      });
+
+      const beforeMiddlewares = await api.applyPlugins({
+        key: 'addBeforeMiddewares',
+        type: api.ApplyPluginsType.add,
+        initialValue: [],
+        args: {},
+      });
+      const middlewares = await api.applyPlugins({
+        key: 'addMiddewares',
+        type: api.ApplyPluginsType.add,
+        initialValue: [],
+        args: {},
+      });
+
+      const server = new Server({
+        ...opts,
+        compress: true,
+        headers: {
+          'access-control-allow-origin': '*',
+        },
+        proxy: api.config.proxy,
+        beforeMiddlewares,
+        afterMiddlewares: [
+          ...middlewares,
+          createRouteMiddleware({ api, sharedMap }),
+        ],
+        ...(api.config.devServer || {}),
+      });
+      const hostname =
+        process.env.HOST || api.config.devServer?.host || '0.0.0.0';
+      const listenRet = await server.listen({
+        port,
+        hostname,
+      });
+      return {
+        ...listenRet,
+        destroy,
+      };
+    },
+  });
+};
+
+```
+
+### 总结
+至此通过顺着umi dev命令，我们大致了解了umi的整个启动流程
+```
+cross-env UMI_ENV=ronghe_dev WATCH_IGNORED=none umi dev
+```
+可以发现主要就是插件的注册, 核心文件就是service.ts，dev build help等命令就是注册了一个插件。后面会说的的路由、内置方法等都是以插件方式注册进来的。  
+
+service中插件是如何注册的？  
+serice中命令是如何注册的？  
+不同插件都可以使用的内置命令是如何累计执行的？ 
+
+接下来直接进入umi 核心——插件机制
 
 ---
-此文自动发布于：<a href="https://github.com/coderPerseus/blog/issues/4" target="_blank">github issues</a>
+此文自动发布于：<a href="https://github.com/duchao-duchao/dc-blog/issues/4" target="_blank">github issues</a>

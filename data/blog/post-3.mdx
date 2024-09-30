@@ -1,0 +1,552 @@
+---
+title: UMI源码学习【2】——插件机制
+date: 2024-09-30T04:19:47Z
+slug: post-3
+author: duchao-duchao：https://github.com/duchao-duchao
+tags: ["UMI"]
+---
+
+
+> UMI源码学习系列  
+[UMI源码学习【1】——从umi dev到启动流程](https://juejin.cn/post/7310112724944732160)  
+[UMI源码学习【2】——插件机制](https://juejin.cn/post/7310107007984877603)
+
+### 插件初始化
+插件的初始化操作在new Service().run()中执行
+run中执行init
+```
+ async init() {
+    // we should have the final hooksByPluginId which is added with api.register()
+    this.initPresetsAndPlugins();
+
+    // hooksByPluginId -> hooks
+    // hooks is mapped with hook key, prepared for applyPlugins()
+    // 把hooksByPluginId中内容映射到hooks中以key
+    this.setStage(ServiceStage.initHooks);
+    Object.keys(this.hooksByPluginId).forEach(id => {
+      const hooks = this.hooksByPluginId[id];
+      hooks.forEach(hook => {
+        const { key } = hook;
+        hook.pluginId = id;
+        this.hooks[key] = (this.hooks[key] || []).concat(hook);
+      });
+    });
+
+    // plugin is totally ready
+    this.setStage(ServiceStage.pluginReady);
+    this.applyPlugins({
+      key: 'onPluginReady',
+      type: ApplyPluginsType.event,
+    });
+    ...省略与初始化插件无关的代码
+  }
+```
+1、constructor中通过resolvePresets resolvePlugins 初始化initialPresets initialPlugins，会把每一个插件预计预设处理成固定格式，处理经过函数依次为resolvePlugins-->pathToObj,在pathToObj中会生成apply函数，通过apply函数可以拿到插件模块代码。
+```
+    this.initialPresets = resolvePresets({
+      ...baseOpts,
+      presets: opts.presets || [],
+      userConfigPresets: this.userConfig.presets || [],
+    });
+    this.initialPlugins = resolvePlugins({
+      ...baseOpts,
+      plugins: opts.plugins || [],
+      userConfigPlugins: this.userConfig.plugins || [],
+    });
+ 
+ // 每一个插件以及预设会处理成为下面的格式
+  {
+    id,
+    key,
+    path: winPath(path),
+    apply() {
+      // use function to delay require
+      try {
+        const ret = require(path);
+        // use the default member for es modules
+        return compatESModuleRequire(ret);
+      } catch (e) {
+        throw new Error(`Register ${type} ${path} failed, since ${e.message}`);
+      }
+    },
+    defaultConfig: null,
+  };
+```
+2、通过initPresetsAndPlugins初始化插件以及预设，在initPresetsAndPlugins中遍历插件以及预设，每一个插件以及预设都会通过getPluginAP方法获取到自己的api对象,调用apply函数注入参数api对象,在插件中可以拿到api中的方法处理一些逻辑。
+```
+-------------------------initPresetsAndPlugins-------------------------
+  initPresetsAndPlugins() {
+    this.setStage(ServiceStage.initPresets);
+    this._extraPlugins = [];
+    while (this.initialPresets.length) {
+      this.initPreset(this.initialPresets.shift()!);
+    }
+
+    this.setStage(ServiceStage.initPlugins);
+    this._extraPlugins.push(...this.initialPlugins);
+    while (this._extraPlugins.length) {
+      this.initPlugin(this._extraPlugins.shift()!);
+    }
+  }
+ ----------------initPlugin------------------- 
+  initPlugin(plugin: IPlugin) {
+    const { id, key, apply } = plugin;
+
+    const api = this.getPluginAPI({ id, key, service: this });
+
+    // register before apply
+    this.registerPlugin(plugin);
+    apply()(api);
+  }
+ -----------------getPluginAPI---------------------
+   getPluginAPI(opts: any) {
+    const pluginAPI = new PluginAPI(opts);
+
+    // register built-in methods
+    // 给api注册自己的方法，即使重名依旧不报错
+    [
+      'onPluginReady',
+      'modifyPaths',
+      'onStart',
+      'modifyDefaultConfig',
+      'modifyConfig',
+    ].forEach(name => {
+      pluginAPI.registerMethod({ name, exitsError: false });
+    });
+
+    // 代理api的取值，加上service上的部分方法 nb
+    return new Proxy(pluginAPI, {
+      get: (target, prop: string) => {
+        // 由于 pluginMethods 需要在 register 阶段可用
+        // 必须通过 proxy 的方式动态获取最新，以实现边注册边使用的效果
+        if (this.pluginMethods[prop]) return this.pluginMethods[prop];
+        if (
+          [
+            'applyPlugins',
+            'ApplyPluginsType',
+            'EnableBy',
+            'ConfigChangeType',
+            'babelRegister',
+            'stage',
+            'ServiceStage',
+            'paths',
+            'cwd',
+            'pkg',
+            'userConfig',
+            'config',
+            'env',
+            'args',
+            'hasPlugins',
+            'hasPresets',
+          ].includes(prop)
+        ) {
+          return typeof this[prop] === 'function'
+            ? this[prop].bind(this)
+            : this[prop];
+        }
+        return target[prop];
+      },
+    });
+  }
+```
+3、然后把hooksByPluginId中内容格式映射一下到hooks中
+hooksByPluginId是以插件id为维度对应各个函数如下
+```
+  hooksByPluginId: { // 插件id对应的hook函数数组
+    [id: string]: IHook[];
+    // {
+    //   'pluginA': [{name:'插件名称'，fn: ()=>{}},{name:'插件名称'，fn: ()=>{}},{name:'插件名称'，fn: ()=>{}}],
+    //   'pluginB':  [{name:'插件名称'，fn: ()=>{}},{name:'插件名称'，fn: ()=>{}},{name:'插件名称'，fn: ()=>{}}],
+    // }
+  } = {};
+```
+hooks是以插件调用函数名称为维度对应各个函数
+```
+  hooks: {
+    [key: string]: IHook[]; // 插件调用函数名称：[每个插件调用的函数]
+    // {
+    //   'modifyRoutes': [{name:'插件名称'，fn: ()=>{}},{name:'插件名称'，fn: ()=>{}},{name:'插件名称'，fn: ()=>{}}],
+    //   'modifyHTML':  [{name:'插件名称'，fn: ()=>{}},{name:'插件名称'，fn: ()=>{}},{name:'插件名称'，fn: ()=>{}}],
+    // }
+  } = {};
+```
+```
+    // hooksByPluginId -> hooks
+    // hooks is mapped with hook key, prepared for applyPlugins()
+    // 把hooksByPluginId中内容映射到hooks中以key
+    this.setStage(ServiceStage.initHooks);
+    Object.keys(this.hooksByPluginId).forEach(id => {
+      const hooks = this.hooksByPluginId[id];
+      hooks.forEach(hook => {
+        const { key } = hook;
+        hook.pluginId = id;
+        this.hooks[key] = (this.hooks[key] || []).concat(hook);
+      });
+    });
+```
+
+### 插件API——new PluginAPI()
+
+通过上面的分析可以发现绕不开的一个核心PluginAPI直接上PluginAPI源码一看究竟
+```
+export default class PluginAPI {
+  id: string;
+  key: string;
+  service: Service;
+  Html: typeof Html;
+  utils: typeof utils;
+  logger: Logger;
+
+  constructor(opts: IOpts) {
+  // 初始化参数省略，需要注意service，所有插件以及预设都是使用的同一个service
+  }
+
+  // 更新id key以及一些配置
+  describe({
+    id,
+    key,
+    config,
+    enableBy,
+  }: {
+    id?: string;
+    key?: string;
+    config?: IPluginConfig;
+    enableBy?: EnableBy | (() => boolean);
+  } = {}) {
+  // 省略源码可以去gitbub看看这里的操作
+  }
+
+  register(hook: IHook) {
+    assert(
+      hook.key && typeof hook.key === 'string',
+      `api.register() failed, hook.key must supplied and should be string, but got ${hook.key}.`,
+    );
+    assert(
+      hook.fn && typeof hook.fn === 'function',
+      `api.register() failed, hook.fn must supplied and should be function, but got ${hook.fn}.`,
+    );
+    this.service.hooksByPluginId[this.id] = (
+      this.service.hooksByPluginId[this.id] || []
+    ).concat(hook);
+  }
+
+  // 注册命令到service上
+  registerCommand(command: ICommand) {
+    const { name, alias } = command;
+    assert(
+      !this.service.commands[name],
+      `api.registerCommand() failed, the command ${name} is exists.`,
+    );
+    this.service.commands[name] = command;
+    if (alias) {
+      this.service.commands[alias] = name;
+    }
+  }
+
+  // 注册预设
+  registerPresets(presets: (IPreset | string)[]) {
+    assert(
+      this.service.stage === ServiceStage.initPresets,
+      `api.registerPresets() failed, it should only used in presets.`,
+    );
+    assert(
+      Array.isArray(presets),
+      `api.registerPresets() failed, presets must be Array.`,
+    );
+    // 处理预设函数成一定格式 需要有apply函数apply可以获取到模块
+    const extraPresets = presets.map(preset => {
+      return isValidPlugin(preset as any)
+        ? (preset as IPreset)
+        : pathToObj({
+            type: PluginType.preset,
+            path: preset as string,
+            cwd: this.service.cwd,
+          });
+    });
+    // 插到最前面，下个 while 循环优先执行
+    this.service._extraPresets.splice(0, 0, ...extraPresets);
+  }
+
+  // 在 preset 初始化阶段放后面，在插件注册阶段放前面
+  registerPlugins(plugins: (IPlugin | string)[]) {
+    assert(
+      this.service.stage === ServiceStage.initPresets ||
+        this.service.stage === ServiceStage.initPlugins,
+      `api.registerPlugins() failed, it should only be used in registering stage.`,
+    );
+    assert(
+      Array.isArray(plugins),
+      `api.registerPlugins() failed, plugins must be Array.`,
+    );
+    const extraPlugins = plugins.map(plugin => {
+      return isValidPlugin(plugin as any)
+        ? (plugin as IPreset)
+        : pathToObj({
+            type: PluginType.plugin,
+            path: plugin as string,
+            cwd: this.service.cwd,
+          });
+    });
+    if (this.service.stage === ServiceStage.initPresets) {
+      this.service._extraPlugins.push(...extraPlugins);
+    } else {
+      this.service._extraPlugins.splice(0, 0, ...extraPlugins);
+    }
+  }
+
+  // 注册方法，方法是注册到了service中的pluginMethods
+  registerMethod({
+    name,
+    fn,
+    exitsError = true,
+  }: {
+    name: string;
+    fn?: Function;
+    exitsError?: boolean;
+  }) {
+    // 不同插件也不能注册同名方法
+    if (this.service.pluginMethods[name]) {
+      if (exitsError) {
+        throw new Error(
+          `api.registerMethod() failed, method ${name} is already exist.`,
+        );
+      } else {
+        return;
+      }
+    }
+    // 如果有fn注册fn，没有fn则注册一个默认函数，执行这个函数会注册一个hook到 this.service.hooksByPluginId
+    // 比如三个插件使用了内置api modifyRoutes 修改路由
+    // new了三个PluginAPI(); 由于在preset-built-in/registerMethods中注册好了扩展方法，当api.modifyRoutes执行的时候会走到getPluginApi中的new Proxy代理，拿到service对象上的pluginMethod,也就这个默认函数。
+    // 这个默认函数执行的时候可以注册hook到 this.service.hooksByPluginId,  然后service中把hooksByPluginId转到hooks中
+    // 然后在routers中通过applyPlugins执行这个函数以及每个插件的hook累计结果输出
+    this.service.pluginMethods[name] =
+      fn ||
+      // 这里不能用 arrow function，this 需指向执行此方法的 PluginAPI
+      // 否则 pluginId 会不会，导致不能正确 skip plugin
+      function(fn: Function) {
+        const hook = {
+          key: name,
+          ...(utils.lodash.isPlainObject(fn) ? fn : { fn }),
+        };
+        // @ts-ignore
+        this.register(hook);
+      };
+  }
+
+  // 跳过插件
+  skipPlugins(pluginIds: string[]) {
+    pluginIds.forEach(pluginId => {
+      this.service.skipPluginIds.add(pluginId);
+    });
+  }
+}
+
+```
+可以看到PluginAPI负责生成API对象传参给每一个插件，每一个api共享同一个service对象，**然后代理一下API对象，可以获取到service中的部分方法**，核心方法就是PluginAPI中含有的方法，然后在在preset-built-in/registerMethods中注册好了扩展方法,所以写UMI插件的时候一些内置方法提供我们使用。**当访问api.modifyRoutes的时候，会走到这里getPluginAPI中的这行代码，返回service对象中的pluginMethods[prop]（也就是在preset-built-in/registerMethods中注册的扩展方法，每个扩展方法的执行都会添加hook到对应的this.service.hooksByPluginId中）**
+```
+if (this.pluginMethods[prop]) return this.pluginMethods[prop];
+```
+### 插件的触发执行——applyPlugins
+那疑问来了，比如我写了三个插件来修改路由，如下，那么是如何触发修改的？？？
+```
+------------插件1----------------
+const func1 = (memo) => {
+  Object.keys(memo).forEach((id) => {
+    const route = memo[id];
+    if(route.path === '/test1'){
+      route.path = '/redirect1'
+    }
+  });
+  return memo;
+}
+api.modifyRoutes(func1)
+------------插件2----------------
+const func2 = (memo) => {
+  Object.keys(memo).forEach((id) => {
+    const route = memo[id];
+    if(route.path === '/test2'){
+      route.path = '/redirect2'
+    }
+  });
+  return memo;
+}
+api.modifyRoutes(func2)
+------------插件3----------------
+cont fun3 = (memo) => {
+  Object.keys(memo).forEach((id) => {
+    const route = memo[id];
+    if(route.path === '/test3'){
+      route.path = '/redirect3'
+    }
+  });
+  return memo;
+}
+api.modifyRoutes(fun3)
+```
+经过上面的分析，首先这三个插件的api.modifyRoutes的执行都会把func1、func2、func3添加到**hooksByPluginId**中结构如下
+```
+hooksByPluginId = {
+ 'plugin1':[{name: 'modifyRoutes', fn: func1}],
+ 'plugin2':[{name: 'modifyRoutes', fn: func2}],
+ 'plugin3':[{name: 'modifyRoutes', fn: func3}]
+}
+```
+然后在service中会把**hooksByPluginId**转到**hooks**中结构如下：
+```
+hooks = {
+  'modifyRoutes': [
+      {pluginId: 'plugin1', key: 'modifyRoutes', fn: fun1},
+      {pluginId: 'plugin2', key: 'modifyRoutes', fn: fun2},
+      {pluginId: 'plugin3', key: 'modifyRoutes', fn: fun3},
+  ]
+}
+```
+到此还没有触发modifyRoutes，触发是在源码中prereset-built-in中注册的路由插件中执行的源码如下：
+```
+import { IApi } from '@umijs/types';
+import { Route } from '@umijs/core';
+
+export default function(api: IApi) {
+  api.describe({
+    key: 'routes',
+    config: {
+      schema(joi) {
+        return joi.array().items(joi.object());
+      },
+      onChange: api.ConfigChangeType.regenerateTmpFiles,
+    },
+  });
+
+  api.registerMethod({
+    name: 'getRoutes',
+    async fn() {
+      const route = new Route({
+        async onPatchRoutes(args: object) {
+          await api.applyPlugins({
+            key: 'onPatchRoutes',
+            type: api.ApplyPluginsType.event,
+            args,
+          });
+        },
+        async onPatchRoute(args: object) {
+          await api.applyPlugins({
+            key: 'onPatchRoute',
+            type: api.ApplyPluginsType.event,
+            args,
+          });
+        },
+      });
+      return await api.applyPlugins({
+        key: 'modifyRoutes',
+        type: api.ApplyPluginsType.modify,
+        initialValue: await route.getRoutes({
+          config: api.config,
+          root: api.paths.absPagesPath!,
+        }),
+      });
+    },
+  });
+}
+
+```
+其中api.applyPlugins用于触发插件的执行，**api.applyPlugins函数从哪里来呐？看到这里我直呼nb,调用api.applyPlugins的时候会走到getPluginAPI设置的代理，获取到service对象上的applyPlugins函数**，看一下applyPlugins函数负责的逻辑是什么，来上源码
+```
+import { AsyncSeriesWaterfallHook } from 'tapable';
+
+  async applyPlugins(opts: {
+    key: string;
+    type: ApplyPluginsType;
+    initialValue?: any;
+    args?: any;
+  }) {
+    
+    const hooks = this.hooks[opts.key] || [];
+    switch (opts.type) {
+      case ApplyPluginsType.add:
+        if ('initialValue' in opts) {
+          assert(
+            Array.isArray(opts.initialValue),
+            `applyPlugins failed, opts.initialValue must be Array if opts.type is add.`,
+          );
+        }
+        const tAdd = new AsyncSeriesWaterfallHook(['memo']);
+        for (const hook of hooks) {
+          if (!this.isPluginEnable(hook.pluginId!)) {
+            continue;
+          }
+          tAdd.tapPromise(
+            {
+              name: hook.pluginId!,
+              stage: hook.stage || 0,
+              // @ts-ignore
+              before: hook.before,
+            },
+            async (memo: any[]) => {
+              const items = await hook.fn(opts.args);
+              return memo.concat(items);
+            },
+          );
+        }
+        return await tAdd.promise(opts.initialValue || []);
+      case ApplyPluginsType.modify:
+        const tModify = new AsyncSeriesWaterfallHook(['memo']);
+        for (const hook of hooks) {
+          if (!this.isPluginEnable(hook.pluginId!)) {
+            continue;
+          }
+          tModify.tapPromise(
+            {
+              name: hook.pluginId!,
+              stage: hook.stage || 0,
+              // @ts-ignore
+              before: hook.before,
+            },
+            async (memo: any) => {
+              return await hook.fn(memo, opts.args);
+            },
+          );
+        }
+        return await tModify.promise(opts.initialValue);
+      case ApplyPluginsType.event:
+        const tEvent = new AsyncSeriesWaterfallHook(['_']);
+        for (const hook of hooks) {
+          if (!this.isPluginEnable(hook.pluginId!)) {
+            continue;
+          }
+          tEvent.tapPromise(
+            {
+              name: hook.pluginId!,
+              stage: hook.stage || 0,
+              // @ts-ignore
+              before: hook.before,
+            },
+            async () => {
+              await hook.fn(opts.args);
+            },
+          );
+        }
+        return await tEvent.promise();
+      default:
+        throw new Error(
+          `applyPlugin failed, type is not defined or is not matched, got ${opts.type}.`,
+        );
+    }
+  }
+```
+建议先了解一下tapable这个包是干嘛用的，简单来讲可以异步串行执行结果，把上一次结果丢给下一次执行,类似js中reduce。  
+分类型执行插件，不同类型处理方式不一样。  
+api.modifyRoutes中的type是api.ApplyPluginsType.modify,所以在applyPlugins中看到取出modifyRoutes对应的hook数组，然后给根据初始值依次执行hooks.fn函数
+```
+const hooks = this.hooks[opts.key] || [];
+```
+### 总结
+到此UMI的核心插件系统大致熟悉了，其中有许多细节没有提到，反复阅读源码可以学到很多东西。UMI剩余的比如路由、react渲染、dva等都是以插件形式进行注册的。
+
+umi如何渲染的？  
+umi如何与react想结合的？  
+umi的路由系统怎么生成的？  
+
+
+
+---
+此文自动发布于：<a href="https://github.com/duchao-duchao/dc-blog/issues/3" target="_blank">github issues</a>
