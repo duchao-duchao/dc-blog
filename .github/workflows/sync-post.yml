@@ -17,9 +17,9 @@ on:
       - committed # 修改？
   workflow_dispatch:
 env:
-  # GH_TOKEN: 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
-  GH_USER: duchao-duchao
-  GH_PROJECT_NAME: dc-blog
+  GH_TOKEN: ${{ secrets.GH_TOKEN }}
+  GH_USER: ${{ secrets.GH_USER }}
+  GH_PROJECT_NAME: ${{ secrets.GH_PROJECT_NAME }}
 jobs:
   Publish:
     runs-on: ubuntu-latest
