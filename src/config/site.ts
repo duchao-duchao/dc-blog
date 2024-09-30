@@ -24,78 +24,15 @@ const baseSiteConfig: SiteConfig = {
 		'学习笔记',
 		'程序员'
 	],
-	authors: 'LuckySnail',
-	email: 'snailrun160@gmail.com',
-	authorsCN: '幸运的蜗牛',
-	authorsUrl: 'https://github.com/chaseFunny',
+	authors: 'dc',
+	email: '2394245871@qq.com',
+	authorsCN: '吃饺子不吃馅',
+	authorsUrl: 'https://github.com',
 	social: [
 		{
-			href: 'https://github.com/chaseFunny',
+			href: 'https://github.com',
 			text: 'github',
 			icon: 'GitHubIcon'
-		},
-		{
-			href: 'wx',
-			text: '微信',
-			isPicture: true,
-			icon: 'WxIcon'
-		},
-		{
-			href: 'wxPublic',
-			text: '微信公众号',
-			isPicture: true,
-			icon: 'WxMediaIcon'
-		},
-		{
-			href: 'snailrun160@gmail.com',
-			text: '邮箱',
-			icon: 'MailIcon'
-		},
-		{
-			href: 'qq',
-			text: 'QQ',
-			isPicture: true,
-			hide: true,
-			icon: 'QqIcon'
-		},
-		{
-			href: 'https://juejin.cn/user/3606868169065389',
-			text: '掘金',
-			icon: 'JueJinIcon'
-		},
-		{
-			href: 'https://x.com/haozhan05554957',
-			text: '推特（X）',
-			icon: 'XIcon'
-		},
-		{
-			href: 'https://www.zhihu.com/people/axing-zh',
-			text: '知乎',
-			icon: 'ZhihuIcon'
-		},
-		{
-			href: 'https://space.bilibili.com/1695997565',
-			text: '哔哩哔哩',
-			icon: 'BilibiliIcon'
-		},
-		{
-			href: 'https://www.youtube.com/@lucky2snail',
-			text: 'YouTube',
-			hide: true,
-			icon: 'YouTubeIcon'
-		},
-		{
-			href: 'douyin',
-			text: '抖音',
-			isPicture: true,
-			hide: true,
-			icon: 'TiktokIcon'
-		},
-		{
-			href: 'https://www.xiaohongshu.com/user/profile/5e2d938d000000000100ac82',
-			text: '小红书',
-			hide: true,
-			icon: 'RedBookIcon'
 		}
 	],
 	themeColors: [

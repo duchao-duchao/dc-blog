@@ -1,8 +1,8 @@
 {
-	"name": "lucky-snail-blog",
+	"name": "dc-blog",
 	"description": "基于 Next.js + tailwindcss + framer motion + contentlayer + github actions + github issues 的个人博客",
 	"keywords": [
-		"luckySnail",
+		"dc",
 		"nextjs",
 		"tailwindcss",
 		"framer motion",
