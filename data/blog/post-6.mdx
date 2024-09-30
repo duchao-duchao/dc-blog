@@ -1,0 +1,263 @@
+---
+title: JavaScript扎马步——作用域、闭包、this指向
+date: 2024-09-30T16:11:49Z
+slug: post-6
+author: duchao-duchao：https://github.com/duchao-duchao
+tags: ["JS"]
+---
+
+笔者（吃饺子不吃馅）在平时做项目当中以及日常工作中发现js基础不够牢固，痛定思痛，决定好好复习一下js基础，作为一名前端开发人员，在js上花费再多时间我认为都是值得的
+## 一、作用域
+#### 函数作用域
+函数作用域的含义是指，属于这个函数的全部变量都可以在整个函数的范围内使用及复用。
+简而言之就是函数内部声明的变量只能在函数内部访问，在外部就访问不到了。
+```
+function demo() {
+  var a = 1;
+  console.log(a);
+}
+demo(); // 1
+console.log(a); // 报错
+```
+很容易理解不再详细介绍，这么设计的目的应该就是为了安全性以及变量之间避免同名冲突。
+
+由函数作用域派生出两点关于函数的点：<br>
+1、立即执行函数
+```
+// 立即执行
+(function demo() {
+    var a = 1;
+    console.log(a);
+})()
+
+(function demo() {
+    var a = 1;
+    console.log(a);
+}())
+```
+2、函数表达式与函数声明
+```
+// 函数声明
+function demo() {}
+// 函数表达式
+let demo = function () {}
+```
+函数声明方式创建的函数会进行提示，在声明之前也可以使用
+```
+demo() // 1
+function demo() { console.log(1) }
+```
+函数表达式在函数表达式赋值之前就是一个简单的变量定义，用let声明则执行demo的时候根本没有变量，用var声明则var demo;但是不是函数也会报错
+```
+demo()
+var demo = function () { console.log(1) }
+VM2198:1 Uncaught TypeError: demo is not a function
+
+demo()
+let demo = function () { console.log(1) }
+VM2276:1 Uncaught ReferenceError: demo is not defined
+```
+函数声明和变量声明都会被提升。但是函数声明会比变量声明先一步。重复的 var 声明会被忽略掉，但出现在后面的函数声明还是可以覆盖前面的
+```
+demo(); // 1 
+var demo; 
+function demo() { console.log( 1 ); } 
+demo = function() { console.log( 2 ); };
+```
+
+### 块级作用域
+说白了就是tmd花括号   { }
+```
+{ 
+    let a =1
+} 
+console.log(a)
+VM2884:1 Uncaught ReferenceError: a is not defined
+// 执行完花括号 a就被销毁了
+```
+### 全局作用域
+简单理解最外层的就是全局作用域，在最外层声明变量后就会赋值给全局作用域
+```
+var a = 1;
+// a就是全局作用域的打印window.a与a一样
+
+```
+### 词法作用域
+不用整那么多那一理解的概念，就是在定义的时候的作用域，规则就是一级一级向上匹配
+
+## 二、闭包有那么复杂？
+闭包的概念以及解释有很多，还记得最开始学习前端的时候觉得闭包很迷，其实仔细理解一下，这东西按照一定思路来理解就行，没必要非得纠结于闭包的概念。<br/> 
+看下面的代码这tm经常使用吧！
+```
+function demo() {
+    var a = 1;
+    function dayin() {
+        console.log(a)
+    }
+    return dayin;
+}
+let res = demo()
+res()
+```
+本来在demo函数作用域中的变量a只能在demo中访问，但是res在外面也可以访问了！这就是闭包。
+demo执行后demo作用域中的数据应该被销毁但是由于res的引用没有销毁。<br/>
+**闭包：本来应该销毁但是没有销毁**
+
+## 三、this
+this是动态的，指代当前运行的上下文。this指向调用它的上下文，this会按照一定规则进行绑定。
+### 默认绑定
+例子：
+```
+function demo() {
+  var a = 2;
+  this.demo1();
+}
+function demo1() {
+  console.log(this.a);
+}
+demo();// a is not define
+```
+为啥报错？ 这么写应该会好理解一些
+```
+function demo() {
+  var a = 2;
+  this.demo1();
+}
+function demo1() {
+  console.log(this.a);
+}
+window.demo();
+```
+执行this.demo1()的时候相当于执行window.demo1()，自然就找不到a。如果使用严格模式（strict mode），那么全局对象将无法使用默认绑定。
+
+### 隐式绑定
+例子：
+```
+function demo() {
+  console.log(this.a);
+}
+var obj2 = {
+  a: '2',
+  demo: demo,
+};
+var obj1 = {
+  a: '1',
+  obj2: obj2,
+};
+obj1.obj2.demo(); // '2'
+```
+好吧，其实简单理解为obj2最后调用的，所以this指向obj2就行。管他什么隐式默认显示的绑定。
+但是**隐式绑定很容易出现隐式丢失**的情况: （传参、赋值等）
+```
+function demo() {
+  console.log(this.a);
+}
+var obj = {
+  a: 520,
+  demo: demo,
+};
+var res = obj.demo;
+res(); // undefined
+相当于window.res()而不是window.obj.res()
+-------------------------------------------
+function demo() {
+  console.log(this.a);
+}
+function runFun(fn) {
+  fn();
+}
+var obj = {
+  a: 520,
+  demo: demo,
+};
+runFun(obj.demo);// undefined
+参数赋值的时候会导致隐式丢失
+相当于runFun(window.demo)
+```
+### 显示绑定
+call、apply、bind <br/>
+call( thisValue , arg1, arg2, ... )
+```
+var color = "red";
+var obj = {color: "blue"};
+function sayColor(){
+	console.log(this.color);
+}
+sayColor() // red
+sayColor.call(obj) // blue
+```
+apply( thisValue , [arg1, arg2, ...] )
+```
+var color = "red";
+var obj = {color: "blue"};
+function sayColor(){
+	console.log(this.color);
+}
+sayColor() // red
+sayColor.apply(obj) // blue
+```
+bind( thisValue , arg1, arg2, ... )()
+```
+var color = "red";
+var obj = {color: "blue"};
+function sayColor(){
+	console.log(this.color);
+}
+sayColor() // red
+sayColor.bind(obj)() // blue
+```
+把 null 或者 undefined 作为 this 的绑定对象传入 call、apply 或者 bind，这些值 在调用时会被忽略，实际应用的是默认绑定规则,但是可以用来进行展开柯里化等操作，不会产生什么副作用。
+```
+function demo(arg1, arg2, arg3) {
+  console.log(arg1, arg2, arg3);
+}
+// 把数组“展开”成参数
+demo.apply(null, [1, 2, 3]); // 1,2,3
+// 使用 bind(..) 进行柯里化
+var bar = demo.bind(null, 1);
+bar(2)(3); // 1,2,undefined
+```
+### new绑定
+
+this绑定的是新创建的对象
+new执行了四步操作从中可以看出this指向新创建的对象
+```
+// new所执行的操作
+// 1、创建一个对象
+// 2、该对象的原型指向构造函数的原型对象
+// 3、把构造函数的this指向obj
+// 4、构造函数执行结果如果是引用类型则返回执行结果，不然就返回创建的对象
+function _new (fn, ...arg) {
+   //Object.create()创建的对象的原型指向传入的对象
+  const obj = Object.create(fn.prototype);// obj.__proto__ === fn.prototype
+  const res = fn.apply(obj, arg);
+  return res instanceof Object ? res : obj;
+}
+```
+### 箭头函数的this
+箭头函数的this是根据当前的词法作用域来决定，也就是说在箭头函数被定义的时候已经确定了this的指向。<br/>
+箭头函数会继承外层函数调用的this绑定。<br/>
+箭头函数的绑定无法被修改。call apply bind没用
+```
+// demo在定义的时候的词法作用域的this就是window
+const demo = () => { console.log(this) }
+demo();  // window
+
+const obj = { name: 'dc }
+// call也不会改变this指向
+demo.call(obj); // window
+---------------------------------------------------------
+// 箭头函数的 `this` 值是在创建函数时继承自外部作用域，而不是在函数被调用时动态确定的
+// 箭头函数被声明的时候的作用域是window所以this指向window
+// 对象字面量本身并没有自己的作用域
+const obj = { 
+    name: 'dc', 
+    fun: () => { return this.name; } 
+ };
+ obj.fun(); // undefined
+```
+箭头函数的核心理解可以为： this为它爹的this,它爹的this动态改变后自然它的this就会改变，但是一旦它爹确定了this那么儿子也就确定了this。
+
+
+---
+此文自动发布于：<a href="https://github.com/duchao-duchao/dc-blog/issues/6" target="_blank">github issues</a>
