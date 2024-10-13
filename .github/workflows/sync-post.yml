@@ -34,7 +34,7 @@ jobs:
 
       - name: Git config 🔧
         run: |
-          git config --global user.name "dc"
+          git config --global user.name "duchao-duchao"
           git config --global user.email "2394245871@qq.com"
 
       - name: Display runtime info ✨

@@ -4,27 +4,22 @@
         <description><![CDATA[我是幸运的蜗牛，一名充满热情的前端开发工程师。我热衷于探索和体验最新技术，特别是人工智能（AI），并在日常工作中去使用它们，来提升我的工作效率。我的目标是积极参与开源社区，为开源项目贡献自己的力量。正如我的名字，我相信越努力，越幸运]]></description>
         <link>https://luckysnail.cn</link>
         <generator>RSS for Node</generator>
-        <lastBuildDate>Mon, 30 Sep 2024 15:53:41 GMT</lastBuildDate>
+        <lastBuildDate>Mon, 30 Sep 2024 17:13:12 GMT</lastBuildDate>
         <atom:link href="https://luckysnail.cn/feed.xml" rel="self" type="application/rss+xml"/>
-        <item>
-            <title><![CDATA[UMI源码学习【1】——从umi dev到启动流程]]></title>
-            <link>https://luckysnail.cn/posts/post-4</link>
-            <guid isPermaLink="true">https://luckysnail.cn/posts/post-4</guid>
-        </item>
-        <item>
-            <title><![CDATA[UMI源码学习【2】——插件机制]]></title>
-            <link>https://luckysnail.cn/posts/post-3</link>
-            <guid isPermaLink="true">https://luckysnail.cn/posts/post-3</guid>
-        </item>
-        <item>
-            <title><![CDATA[大文件上传思路，以及实现]]></title>
-            <link>https://luckysnail.cn/posts/post-5</link>
-            <guid isPermaLink="true">https://luckysnail.cn/posts/post-5</guid>
-        </item>
         <item>
             <title><![CDATA[SSR 服务端渲染学习]]></title>
             <link>https://luckysnail.cn/posts/post-1</link>
             <guid isPermaLink="true">https://luckysnail.cn/posts/post-1</guid>
+        </item>
+        <item>
+            <title><![CDATA[微前端无界(wujie)源码浅析——子应用加载与js、css沙箱实现]]></title>
+            <link>https://luckysnail.cn/posts/post-2</link>
+            <guid isPermaLink="true">https://luckysnail.cn/posts/post-2</guid>
+        </item>
+        <item>
+            <title><![CDATA[UMI源码学习【1】——从umi dev到启动流程]]></title>
+            <link>https://luckysnail.cn/posts/post-4</link>
+            <guid isPermaLink="true">https://luckysnail.cn/posts/post-4</guid>
         </item>
         <item>
             <title><![CDATA[关于 幸运的蜗牛]]></title>
@@ -32,9 +27,19 @@
             <guid isPermaLink="true">https://luckysnail.cn/posts/1</guid>
         </item>
         <item>
-            <title><![CDATA[微前端无界(wujie)源码浅析——子应用加载与js、css沙箱实现]]></title>
-            <link>https://luckysnail.cn/posts/post-2</link>
-            <guid isPermaLink="true">https://luckysnail.cn/posts/post-2</guid>
+            <title><![CDATA[大文件上传思路，以及实现]]></title>
+            <link>https://luckysnail.cn/posts/post-5</link>
+            <guid isPermaLink="true">https://luckysnail.cn/posts/post-5</guid>
+        </item>
+        <item>
+            <title><![CDATA[JavaScript扎马步——作用域、闭包、this指向]]></title>
+            <link>https://luckysnail.cn/posts/post-6</link>
+            <guid isPermaLink="true">https://luckysnail.cn/posts/post-6</guid>
+        </item>
+        <item>
+            <title><![CDATA[UMI源码学习【2】——插件机制]]></title>
+            <link>https://luckysnail.cn/posts/post-3</link>
+            <guid isPermaLink="true">https://luckysnail.cn/posts/post-3</guid>
         </item>
     </channel>
 </rss>
