@@ -1,0 +1,41 @@
+---
+title: 大杂烩
+date: 2024-10-13T00:53:51Z
+slug: post-11
+author: duchao-duchao：https://github.com/duchao-duchao
+tags: []
+---
+
+### 判断空对象
+```js
+Object.keys(obj).length === 0
+
+JSON.stringify(obj) === '{}'
+
+function isEmptyObject(obj) {
+  for (let key in obj) {
+    if (obj.hasOwnProperty(key)) {
+      return false;
+    }
+  }
+  return true;
+}
+```
+### 函数颗粒化
+```js
+function curry(fn) {
+    return function curried(...args) {
+        if (args.length >= fn.length) {
+          // fn.length 函数的参数个数   args.length当前的参数个数
+            return fn(...args);
+        } else {
+            return function (...moreArgs) {
+                return curried(...args, ...moreArgs);
+            };
+        }
+    };
+}
+```
+
+---
+此文自动发布于：<a href="https://github.com/duchao-duchao/dc-blog/issues/11" target="_blank">github issues</a>
